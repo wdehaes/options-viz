@@ -11,10 +11,6 @@ export default {
       type: Array,
       default: () => []
     },
-    svgId: {
-      type: String,
-      default: () => 'graph'
-    },
     putStrike: {
       type: Number,
       default: () => 32
@@ -22,67 +18,93 @@ export default {
     callStrike: {
       type: Number,
       default: () => 32
+    }
+  },
+  data() {
+    return {
+      svgId: 'graph',
+      svg: {},
+      finalStockPrice: 40,
+      minDate: new Date(2020, 0, 1),
+      maxDate: new Date(2020, 3, 10),
+      now: new Date(2020, 1, 29),
+      expiry: new Date(2020, 2, 31),
+      domain: [20, 50],
+      margin: { top: 30, right: 30, bottom: 30, left: 50 }
+    }
+  },
+  computed: {
+    width() {
+      return 800 - this.margin.left - this.margin.right
     },
-    field: {
-      type: String,
-      default: () => 'Close'
+    height() {
+      return 400 - this.margin.top - this.margin.bottom
+    },
+    x() {
+      const self = this
+      return d3
+        .scaleTime()
+        .domain([this.minDate, self.maxDate])
+        .range([0, this.width])
+    },
+    y() {
+      const self = this
+      return d3
+        .scaleLinear()
+        .domain(self.domain)
+        .range([self.height, 0])
+    }
+  },
+  watch: {
+    finalStockPrice(val) {
+      this.updatePriceMovement(val)
     }
   },
   mounted() {
     this.renderChart()
   },
   methods: {
+    generateData(target) {
+      const ary = []
+      const initPrice = 33.2
+      const diff = target - initPrice
+      for (let index = 31; index > 0; index--) {
+        const date = new Date(2020, 2, index)
+        const pos = Math.random() > 0.5 ? 1 : -1
+        const noise = 1.1 * pos * Math.random() * Math.random()
+        let price = initPrice + (diff * index) / 32 + noise
+        if (index === 31) {
+          price = target
+        } else if (index === 1) {
+          price = initPrice
+        }
+        const dataPoint = {
+          date,
+          price
+        }
+        ary.push(dataPoint)
+      }
+      return ary
+    },
     transformDate(ary) {
       const parser = d3.utcParse('%m/%d/%Y')
-      return this.input.map((element) => {
+      return ary.map((element) => {
         return { price: element.Close, date: parser(element.Date) }
       })
     },
-    renderChart() {
+    updatePriceMovement(price) {
       const self = this
-      const margin = { top: 30, right: 30, bottom: 30, left: 50 }
-      const width = 600 - margin.left - margin.right
-      const height = 300 - margin.top - margin.bottom
-
-      const mindate = new Date(2019, 2, 1)
-      const maxdate = new Date(2020, 2, 1)
-
-      const data = self.transformDate(self.input)
-      // append the svg object to the body of the page
-      const svg = d3
-        .select('#' + this.svgId)
-        .attr('preserveAspectRatio', 'xMinYMin meet')
-        .attr('viewBox', '0 0 460 400')
-        // .attr("width", width + margin.left + margin.right)
-        // .attr("height", height + margin.top + margin.bottom)
-        .append('g')
-        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
-      const x = d3
-        .scaleTime()
-        .domain([mindate, maxdate])
-        .range([0, width])
-      svg
-        .append('g')
-        .attr('transform', 'translate(0,' + height + ')')
-        .call(
-          d3
-            .axisBottom(x)
-            .ticks(10)
-            .tickFormat(d3.timeFormat('%d %B'))
-        )
-      // Add Y axis
-      const y = d3
-        .scaleLinear()
-        .domain([20, 50])
-        .range([height, 0])
-      svg.append('g').call(d3.axisLeft(y))
-      // Add the line
-      svg
-        .append('path')
-        .datum(data)
-        .attr('fill', 'none')
-        .attr('stroke', '#69b3a2')
-        .attr('stroke-width', 1.5)
+      const x = self.x
+      const y = self.y
+      const newData = [].concat(
+        self.generateData(price),
+        self.transformDate(self.input)
+      )
+      this.svg
+        .selectAll('.stockPrice')
+        .datum(newData)
+        .transition()
+        .duration(1000)
         .attr(
           'd',
           d3
@@ -94,21 +116,111 @@ export default {
               return y(d.price)
             })
         )
-      // Add the points
-      // svg
-      //   .append('g')
-      //   .selectAll('dot')
-      //   .data(this.input)
-      //   .enter()
-      //   .append('circle')
-      //   .attr('cx', function(d) {
-      //     return x(d.Date)
-      //   })
-      //   .attr('cy', function(d) {
-      //     return y(d.Close)
-      //   })
-      //   .attr('r', 5)
-      //   .attr('fill', '#69b3a2')
+    },
+    renderChart() {
+      const self = this
+      const x = self.x
+      const y = self.y
+      const data = [].concat(
+        self.generateData(40),
+        self.transformDate(self.input)
+      )
+      // append the svg object to the body of the page
+      this.svg = d3
+        .select('#' + this.svgId)
+        .attr('preserveAspectRatio', 'xMinYMin meet')
+        .attr('viewBox', '0 0 720 500')
+        .append('g')
+        .attr(
+          'transform',
+          'translate(' + self.margin.left + ',' + self.margin.top + ')'
+        )
+      this.svg
+        .append('g')
+        .attr('transform', 'translate(0,' + self.height + ')')
+        .call(d3.axisBottom(x).tickFormat(d3.timeFormat('%m/%d')))
+      // Add Y axis
+      this.svg.append('g').call(d3.axisLeft(y))
+      // Add the line
+      this.svg
+        .append('path')
+        .datum(data)
+        .attr('class', 'stockPrice')
+        .attr('fill', 'none')
+        .attr('stroke', '#69b3a2')
+        .attr('stroke-width', 1)
+        .attr(
+          'd',
+          d3
+            .line()
+            .x(function(d) {
+              return x(d.date)
+            })
+            .y(function(d) {
+              return y(d.price)
+            })
+        )
+      const maxY = y(50)
+      const minY = y(20)
+      const drag = d3
+        .drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended)
+      function dragstarted() {
+        // d3.select(this).classed(activeClassName, true)
+      }
+
+      function dragged(selector) {
+        const y = d3.event.dy
+
+        const line = d3.select(this)
+        // Update the line properties
+        const attributes = {
+          x1: parseInt(line.attr('x1')),
+          y1: parseInt(line.attr('y1')) + y,
+
+          x2: parseInt(line.attr('x2')),
+          y2: parseInt(line.attr('y2')) + y
+        }
+
+        line.attr('y1', Math.min(Math.max(attributes.y1, maxY), minY))
+        line.attr('y2', Math.min(Math.max(attributes.y2, maxY), minY))
+      }
+
+      function dragended() {
+        // d3.select(this).classed(activeClassName, false)
+      }
+
+      const now = this.now
+      this.svg
+        .append('line')
+        .attr('x1', x(now))
+        .attr('y1', minY)
+        .attr('x2', x(now))
+        .attr('y2', maxY)
+        .attr('stroke', 'black')
+        .attr('stroke-width', 0.5)
+
+      const expiry = this.expiry
+      this.svg
+        .append('line')
+        .attr('x1', x(expiry))
+        .attr('y1', minY)
+        .attr('x2', x(expiry))
+        .attr('y2', maxY)
+        .attr('stroke', 'black')
+        .attr('stroke-width', 0.5)
+
+      this.svg
+        .append('line')
+        .attr('x1', x(self.minDate))
+        .attr('y1', y(self.callStrike))
+        .attr('x2', x(expiry))
+        .attr('y2', y(self.callStrike))
+        .attr('stroke', 'red')
+        .attr('stroke-width', 2)
+        .call(drag)
     }
   }
 }

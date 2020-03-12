@@ -214,6 +214,7 @@ export default {
               return y(d.price)
             })
         )
+      this.svg.select('.priceLabel').text('stock price: $' + price)
     },
     renderChart() {
       const self = this

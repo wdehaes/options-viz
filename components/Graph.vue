@@ -10,30 +10,112 @@ export default {
     input: {
       type: Array,
       default: () => []
-    },
-    putStrike: {
-      type: Number,
-      default: () => 32
-    },
-    callStrike: {
-      type: Number,
-      default: () => 32
     }
   },
   data() {
     return {
       svgId: 'graph',
       svg: {},
-      finalStockPrice: 40,
+      finalStockPrice: 40.0,
+      callStrike: 37.0,
+      putStrike: 32.0,
       minDate: new Date(2020, 0, 1),
       maxDate: new Date(2020, 3, 10),
       now: new Date(2020, 1, 29),
       expiry: new Date(2020, 2, 31),
       domain: [20, 50],
-      margin: { top: 30, right: 30, bottom: 30, left: 50 }
+      margin: { top: 30, right: 30, bottom: 30, left: 50 },
+      activeDragName: 'drag-active'
     }
   },
   computed: {
+    callProfit() {
+      return Math.max(0, this.finalStockPrice - this.callStrike)
+    },
+    putProfit() {
+      return Math.max(0, this.putStrike - this.finalStockPrice)
+    },
+    dragCircle() {
+      const self = this
+      function dragged(d) {
+        const y = d3.event.dy
+        const circle = d3.select(this)
+        const attributes = {
+          cx: parseInt(circle.attr('cx')),
+          cy: parseInt(circle.attr('cy')) + y
+        }
+        const yVal = Math.min(Math.max(attributes.cy, self.maxY), self.minY)
+        circle.attr('cx', attributes.cx)
+        circle.attr('cy', yVal)
+
+        // update the value in component
+        const val = self.round(self.y.invert(yVal))
+        self.finalStockPrice = val
+        const label = d3.select('.priceLabel')
+        label.attr('y', yVal + 2)
+      }
+      function dragstarted() {
+        d3.select(this).classed(self.activeDragName, true)
+      }
+      function dragended() {
+        d3.select(this).classed(self.activeDragName, false)
+      }
+      return d3
+        .drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended)
+    },
+    dragLine() {
+      const self = this
+      function dragged(d) {
+        const y = d3.event.dy
+        const line = d3.select(this)
+        // Update the line properties
+        const attributes = {
+          x1: parseInt(line.attr('x1')),
+          y1: parseInt(line.attr('y1')) + y,
+
+          x2: parseInt(line.attr('x2')),
+          y2: parseInt(line.attr('y2')) + y
+        }
+        const yVal = Math.min(Math.max(attributes.y1, self.maxY), self.minY)
+        line.attr('y1', yVal)
+        line.attr('y2', yVal)
+
+        const classVal = this.classList[0]
+        const label = d3.select('.' + classVal + 'Label')
+        const name = d3.select('.' + classVal + 'Name')
+        label.attr('y', yVal + 2)
+        name.attr('y', yVal - 2)
+        // update the value in component
+        const val = self.round(self.y.invert(yVal))
+        switch (classVal) {
+          case 'call':
+            self.callStrike = val
+            label.text('strike price: $' + self.callStrike)
+            break
+          case 'put':
+            self.putStrike = val
+            label.text('strike price: $' + self.putStrike)
+            break
+
+          default:
+            break
+        }
+      }
+      function dragstarted() {
+        d3.select(this).classed(self.activeDragName, true)
+      }
+      function dragended() {
+        d3.select(this).classed(self.activeDragName, false)
+      }
+      return d3
+        .drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended)
+    },
     width() {
       return 800 - this.margin.left - this.margin.right
     },
@@ -53,6 +135,12 @@ export default {
         .scaleLinear()
         .domain(self.domain)
         .range([self.height, 0])
+    },
+    maxY() {
+      return this.y(this.domain[1])
+    },
+    minY() {
+      return this.y(this.domain[0])
     }
   },
   watch: {
@@ -64,6 +152,77 @@ export default {
     this.renderChart()
   },
   methods: {
+    round(n) {
+      return Math.round((n + Number.EPSILON) * 100) / 100
+    },
+    makeProfitBrace(profitType) {
+      const x = this.x
+      const y = this.y
+      const x12 = x(this.expiry)
+      const y1 = y(this.finalStockPrice)
+      const w = 15
+      const q = 0.5
+      if (profitType === 'call') {
+        return this.makeCurlyBrace(x12, y1, x12, y(this.callStrike), w, q)
+      } else {
+        return this.makeCurlyBrace(x12, y1, x12, y(this.putStrike), w, q)
+      }
+    },
+    makeCurlyBrace(x1, y1, x2, y2, w, q) {
+      // Calculate unit vector
+      let dx = x1 - x2
+      let dy = y1 - y2
+      const len = Math.sqrt(dx * dx + dy * dy)
+      dx = dx / len
+      dy = dy / len
+
+      // Calculate Control Points of path,
+      const qx1 = x1 + q * w * dy
+      const qy1 = y1 - q * w * dx
+      const qx2 = x1 - 0.25 * len * dx + (1 - q) * w * dy
+      const qy2 = y1 - 0.25 * len * dy - (1 - q) * w * dx
+      const tx1 = x1 - 0.5 * len * dx + w * dy
+      const ty1 = y1 - 0.5 * len * dy - w * dx
+      const qx3 = x2 + q * w * dy
+      const qy3 = y2 - q * w * dx
+      const qx4 = x1 - 0.75 * len * dx + (1 - q) * w * dy
+      const qy4 = y1 - 0.75 * len * dy - (1 - q) * w * dx
+
+      return (
+        'M ' +
+        x1 +
+        ' ' +
+        y1 +
+        ' Q ' +
+        qx1 +
+        ' ' +
+        qy1 +
+        ' ' +
+        qx2 +
+        ' ' +
+        qy2 +
+        ' T ' +
+        tx1 +
+        ' ' +
+        ty1 +
+        ' M ' +
+        x2 +
+        ' ' +
+        y2 +
+        ' Q ' +
+        qx3 +
+        ' ' +
+        qy3 +
+        ' ' +
+        qx4 +
+        ' ' +
+        qy4 +
+        ' T ' +
+        tx1 +
+        ' ' +
+        ty1
+      )
+    },
     generateData(target) {
       const ary = []
       const initPrice = 33.2
@@ -104,7 +263,8 @@ export default {
         .selectAll('.stockPrice')
         .datum(newData)
         .transition()
-        .duration(1000)
+        .ease(d3.easeQuadInOut)
+        .duration(200)
         .attr(
           'd',
           d3
@@ -129,19 +289,38 @@ export default {
       this.svg = d3
         .select('#' + this.svgId)
         .attr('preserveAspectRatio', 'xMinYMin meet')
-        .attr('viewBox', '0 0 720 500')
+        .attr('viewBox', '0 0 800 400')
         .append('g')
         .attr(
           'transform',
           'translate(' + self.margin.left + ',' + self.margin.top + ')'
         )
+      // add X axis
       this.svg
         .append('g')
         .attr('transform', 'translate(0,' + self.height + ')')
         .call(d3.axisBottom(x).tickFormat(d3.timeFormat('%m/%d')))
+
+      this.svg
+        .append('text')
+        .attr(
+          'transform',
+          'translate(' + self.width * 0.99 + ' ,' + self.height * 0.99 + ')'
+        )
+        .attr('font-size', '12px')
+        .style('text-anchor', 'middle')
+        .text('Date')
+
       // Add Y axis
       this.svg.append('g').call(d3.axisLeft(y))
-      // Add the line
+      this.svg
+        .append('text')
+        .attr('transform', 'translate(' + 35 + ' ,' + 5 + ')')
+        .attr('font-size', '12px')
+        .style('text-anchor', 'middle')
+        .text('Stock Price')
+
+      // Add stock price line
       this.svg
         .append('path')
         .datum(data)
@@ -160,67 +339,127 @@ export default {
               return y(d.price)
             })
         )
-      const maxY = y(50)
-      const minY = y(20)
-      const drag = d3
-        .drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended)
-      function dragstarted() {
-        // d3.select(this).classed(activeClassName, true)
-      }
-
-      function dragged(selector) {
-        const y = d3.event.dy
-
-        const line = d3.select(this)
-        // Update the line properties
-        const attributes = {
-          x1: parseInt(line.attr('x1')),
-          y1: parseInt(line.attr('y1')) + y,
-
-          x2: parseInt(line.attr('x2')),
-          y2: parseInt(line.attr('y2')) + y
-        }
-
-        line.attr('y1', Math.min(Math.max(attributes.y1, maxY), minY))
-        line.attr('y2', Math.min(Math.max(attributes.y2, maxY), minY))
-      }
-
-      function dragended() {
-        // d3.select(this).classed(activeClassName, false)
-      }
 
       const now = this.now
+      const expiry = this.expiry
+
+      // mark Today
       this.svg
         .append('line')
         .attr('x1', x(now))
-        .attr('y1', minY)
+        .attr('y1', self.minY)
         .attr('x2', x(now))
-        .attr('y2', maxY)
+        .attr('y2', self.maxY)
         .attr('stroke', 'black')
         .attr('stroke-width', 0.5)
+      this.svg
+        .append('text')
+        .attr('x', x(now) + 20)
+        .attr('y1', self.minY)
+        .attr('font-size', '12px')
+        .style('text-anchor', 'middle')
+        .text('Today')
 
-      const expiry = this.expiry
+      // mark expiry date
       this.svg
         .append('line')
         .attr('x1', x(expiry))
-        .attr('y1', minY)
+        .attr('y1', self.minY)
         .attr('x2', x(expiry))
-        .attr('y2', maxY)
+        .attr('y2', self.maxY)
         .attr('stroke', 'black')
         .attr('stroke-width', 0.5)
+      this.svg
+        .append('text')
+        .attr('x', x(expiry) + 45)
+        .attr('y1', self.minY)
+        .attr('font-size', '12px')
+        .style('text-anchor', 'middle')
+        .text('Expiration date')
 
+      // draw circle + label to drag final stock price
+      this.svg
+        .append('circle')
+        .attr('cx', x(expiry))
+        .attr('cy', y(self.finalStockPrice))
+        .attr('r', 5)
+        .style('opacity', 1.0)
+        .style('fill', '#69b3a2')
+        .style('opacity', 0.6)
+        .call(self.dragCircle)
+      this.svg
+        .append('text')
+        .attr('class', 'priceLabel')
+        .attr('x', x(expiry) + 5)
+        .attr('y', y(self.finalStockPrice) + 2)
+        .attr('font-size', '10px')
+        .attr('fill', '#69b3a2')
+        .text('stock price: $' + self.finalStockPrice)
+
+      // draw SVG elements for call price
       this.svg
         .append('line')
+        .attr('class', 'call')
         .attr('x1', x(self.minDate))
         .attr('y1', y(self.callStrike))
         .attr('x2', x(expiry))
         .attr('y2', y(self.callStrike))
-        .attr('stroke', 'red')
+        .attr('stroke', '#734B5E')
         .attr('stroke-width', 2)
-        .call(drag)
+        .style('opacity', 0.6)
+        .call(self.dragLine)
+      this.svg
+        .append('text')
+        .attr('class', 'callLabel')
+        .attr('x', x(expiry) + 5)
+        .attr('y', y(self.callStrike) + 2)
+        .attr('font-size', '10px')
+        .attr('fill', '#734B5E')
+        .text('strike price: $' + self.callStrike)
+      this.svg
+        .append('text')
+        .attr('class', 'callName')
+        .attr('x', x(expiry) - 5)
+        .attr('y', y(self.callStrike) - 2)
+        .attr('font-size', '16px')
+        .attr('fill', '#734B5E')
+        .style('text-anchor', 'end')
+        .text('CALL')
+      this.svg
+        .append('path')
+        .attr('class', 'callProfit')
+        .attr('class', 'curlyBrace')
+        .attr('d', self.makeProfitBrace('call'))
+
+      // draw SVG elements for put price
+      this.svg
+        .append('line')
+        .attr('class', 'put')
+        .attr('x1', x(self.minDate))
+        .attr('y1', y(self.putStrike))
+        .attr('x2', x(expiry))
+        .attr('y2', y(self.putStrike))
+        .attr('stroke', '#335C81')
+        .attr('stroke-width', 2)
+        .style('opacity', 0.6)
+        .call(self.dragLine)
+      this.svg
+        .append('text')
+        .attr('class', 'putLabel')
+        .attr('x', x(expiry) + 5)
+        .attr('y', y(self.putStrike) + 2)
+        .attr('font-size', '10px')
+        .attr('fill', '#335C81')
+        .text('strike price: $' + self.putStrike)
+      this.svg
+        .append('text')
+        .attr('class', 'putName')
+        .attr('x', x(expiry) - 5)
+        .attr('y', y(self.putStrike) - 2)
+        .attr('font-size', '16px')
+        .attr('fill', '#335C81')
+        .style('text-anchor', 'end')
+        .text('PUT')
     }
   }
 }
@@ -238,5 +477,15 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
+}
+
+.curlyBrace {
+  stroke: #000000;
+  stroke-width: 2px;
+  fill: none;
+}
+
+.drag-active {
+  opacity: 1 !important;
 }
 </style>

@@ -30,10 +30,10 @@ export default {
   },
   computed: {
     callProfit() {
-      return Math.max(0, this.finalStockPrice - this.callStrike)
+      return this.round(Math.max(0, this.finalStockPrice - this.callStrike))
     },
     putProfit() {
-      return Math.max(0, this.putStrike - this.finalStockPrice)
+      return this.round(Math.max(0, this.putStrike - this.finalStockPrice))
     },
     dragCircle() {
       const self = this
@@ -146,6 +146,12 @@ export default {
   watch: {
     finalStockPrice(val) {
       this.updatePriceMovement(val)
+    },
+    callProfit(val) {
+      this.svg.select('.callName').text('CALL profit: $' + this.callProfit)
+    },
+    putProfit(val) {
+      this.svg.select('.putName').text('PUT profit: $' + this.putProfit)
     }
   },
   mounted() {
@@ -154,74 +160,6 @@ export default {
   methods: {
     round(n) {
       return Math.round((n + Number.EPSILON) * 100) / 100
-    },
-    makeProfitBrace(profitType) {
-      const x = this.x
-      const y = this.y
-      const x12 = x(this.expiry)
-      const y1 = y(this.finalStockPrice)
-      const w = 15
-      const q = 0.5
-      if (profitType === 'call') {
-        return this.makeCurlyBrace(x12, y1, x12, y(this.callStrike), w, q)
-      } else {
-        return this.makeCurlyBrace(x12, y1, x12, y(this.putStrike), w, q)
-      }
-    },
-    makeCurlyBrace(x1, y1, x2, y2, w, q) {
-      // Calculate unit vector
-      let dx = x1 - x2
-      let dy = y1 - y2
-      const len = Math.sqrt(dx * dx + dy * dy)
-      dx = dx / len
-      dy = dy / len
-
-      // Calculate Control Points of path,
-      const qx1 = x1 + q * w * dy
-      const qy1 = y1 - q * w * dx
-      const qx2 = x1 - 0.25 * len * dx + (1 - q) * w * dy
-      const qy2 = y1 - 0.25 * len * dy - (1 - q) * w * dx
-      const tx1 = x1 - 0.5 * len * dx + w * dy
-      const ty1 = y1 - 0.5 * len * dy - w * dx
-      const qx3 = x2 + q * w * dy
-      const qy3 = y2 - q * w * dx
-      const qx4 = x1 - 0.75 * len * dx + (1 - q) * w * dy
-      const qy4 = y1 - 0.75 * len * dy - (1 - q) * w * dx
-
-      return (
-        'M ' +
-        x1 +
-        ' ' +
-        y1 +
-        ' Q ' +
-        qx1 +
-        ' ' +
-        qy1 +
-        ' ' +
-        qx2 +
-        ' ' +
-        qy2 +
-        ' T ' +
-        tx1 +
-        ' ' +
-        ty1 +
-        ' M ' +
-        x2 +
-        ' ' +
-        y2 +
-        ' Q ' +
-        qx3 +
-        ' ' +
-        qy3 +
-        ' ' +
-        qx4 +
-        ' ' +
-        qy4 +
-        ' T ' +
-        tx1 +
-        ' ' +
-        ty1
-      )
     },
     generateData(target) {
       const ary = []
@@ -424,12 +362,7 @@ export default {
         .attr('font-size', '16px')
         .attr('fill', '#734B5E')
         .style('text-anchor', 'end')
-        .text('CALL')
-      this.svg
-        .append('path')
-        .attr('class', 'callProfit')
-        .attr('class', 'curlyBrace')
-        .attr('d', self.makeProfitBrace('call'))
+        .text('CALL profit: $' + self.callProfit)
 
       // draw SVG elements for put price
       this.svg
@@ -459,7 +392,7 @@ export default {
         .attr('font-size', '16px')
         .attr('fill', '#335C81')
         .style('text-anchor', 'end')
-        .text('PUT')
+        .text('PUT profit: $' + self.putProfit)
     }
   }
 }
@@ -477,12 +410,6 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-}
-
-.curlyBrace {
-  stroke: #000000;
-  stroke-width: 2px;
-  fill: none;
 }
 
 .drag-active {

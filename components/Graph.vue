@@ -69,27 +69,35 @@ export default {
     dragLine() {
       const self = this
       function dragged(d) {
-        const y = d3.event.dy
+        const y = d3.event.y
+        // const y = d3.event.dy
         const line = d3.select(this)
         // Update the line properties
         const attributes = {
           x1: parseInt(line.attr('x1')),
-          y1: parseInt(line.attr('y1')) + y,
+          // y1: parseInt(line.attr('y1')) + y,
+          y1: y,
 
           x2: parseInt(line.attr('x2')),
-          y2: parseInt(line.attr('y2')) + y
+          // y2: parseInt(line.attr('y2')) + y
+          y2: y
         }
-        const yVal = Math.min(Math.max(attributes.y1, self.maxY), self.minY)
+        const yValRaw = Math.min(Math.max(attributes.y1, self.maxY), self.minY)
+        const val = self.round(self.y.invert(yValRaw), 0)
+        const yVal = self.y(val)
         line.attr('y1', yVal)
         line.attr('y2', yVal)
 
         const classVal = this.classList[0]
         const label = d3.select('.' + classVal + 'Label')
         const name = d3.select('.' + classVal + 'Name')
+        const visLine = d3.select('.' + classVal + 'Line')
+
         label.attr('y', yVal + 2)
         name.attr('y', yVal - 2)
+        visLine.attr('y1', yVal)
+        visLine.attr('y2', yVal)
         // update the value in component
-        const val = self.round(self.y.invert(yVal))
         switch (classVal) {
           case 'call':
             self.callStrike = val
@@ -158,8 +166,9 @@ export default {
     this.renderChart()
   },
   methods: {
-    round(n) {
-      return Math.round((n + Number.EPSILON) * 100) / 100
+    round(n, p = 2) {
+      const f = 10 ** p
+      return Math.round((n + Number.EPSILON) * f) / f
     },
     generateData(target) {
       const ary = []
@@ -338,7 +347,7 @@ export default {
       // draw SVG elements for call price
       this.svg
         .append('line')
-        .attr('class', 'call')
+        .attr('class', 'callLine')
         .attr('x1', x(self.minDate))
         .attr('y1', y(self.callStrike))
         .attr('x2', x(expiry))
@@ -368,7 +377,7 @@ export default {
       // draw SVG elements for put price
       this.svg
         .append('line')
-        .attr('class', 'put')
+        .attr('class', 'putLine')
         .attr('x1', x(self.minDate))
         .attr('y1', y(self.putStrike))
         .attr('x2', x(expiry))
@@ -376,7 +385,6 @@ export default {
         .attr('stroke', '#335C81')
         .attr('stroke-width', 2)
         .style('opacity', 0.6)
-        .call(self.dragLine)
       this.svg
         .append('text')
         .attr('class', 'putLabel')
@@ -394,6 +402,31 @@ export default {
         .attr('fill', '#335C81')
         .style('text-anchor', 'end')
         .text('PUT profit: $' + self.putProfit)
+
+      // add invisible lines for interaction
+      this.svg
+        .append('line')
+        .attr('class', 'put')
+        .attr('x1', x(self.minDate))
+        .attr('y1', y(self.putStrike))
+        .attr('x2', x(self.maxDate) + 20)
+        .attr('y2', y(self.putStrike))
+        .attr('stroke', 'red')
+        .attr('stroke-width', 40)
+        .style('stroke-opacity', 0)
+        .call(self.dragLine)
+
+      this.svg
+        .append('line')
+        .attr('class', 'call')
+        .attr('x1', x(self.minDate))
+        .attr('y1', y(self.callStrike))
+        .attr('x2', x(self.maxDate) + 20)
+        .attr('y2', y(self.callStrike))
+        .attr('stroke', 'red')
+        .attr('stroke-width', 40)
+        .style('stroke-opacity', 0)
+        .call(self.dragLine)
     }
   }
 }
@@ -413,7 +446,12 @@ export default {
   left: 0;
 }
 
+.put,
+.call {
+  cursor: grab;
+}
 .drag-active {
   opacity: 1 !important;
+  cursor: ns-resize;
 }
 </style>
